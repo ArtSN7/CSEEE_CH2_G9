@@ -42,8 +42,8 @@ MU_PATH = os.path.join(MODEL_DIR, "mu.npy")
 INV_COV_PATH = os.path.join(MODEL_DIR, "inv_cov.npy")
 
 # Thresholds from training
-HIGH_THRESHOLD = 30.58
-LOW_THRESHOLD = 25.00
+HIGH_THRESHOLD = 50000
+LOW_THRESHOLD = 100000
 
 # Globals
 mean_vector = np.load(MU_PATH)
@@ -86,7 +86,12 @@ def flatten_payload(payload):
             "setpoint_ph": payload["setpoints"]["pH"],
             "setpoint_rpm": payload["setpoints"]["rpm"],
             "faults_active": (
-                ", ".join(payload["faults"]["last_active"])
+                ", ".join(
+                    [
+                        f.get("type", str(f)) if isinstance(f, dict) else str(f)
+                        for f in payload["faults"]["last_active"]
+                    ]
+                )
                 if payload["faults"]["last_active"]
                 else "none"
             ),
