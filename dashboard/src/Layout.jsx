@@ -4,10 +4,12 @@ import Navbar from "./Navbar";
 
 const Layout = () => {
   return (
-    <>
+    <div className="app-layout">
       <Navbar />
-      <Outlet />
-    </>
+      <main className="main-content">
+        <Outlet />
+      </main>
+    </div>
   );
 };
 

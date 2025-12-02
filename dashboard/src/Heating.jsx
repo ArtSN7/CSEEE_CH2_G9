@@ -1,53 +1,56 @@
-import Box from "@mui/material/Box";
+import React from "react";
+import { useMqttTopic } from "./mqttHooks";
 import { LineChart } from "@mui/x-charts/LineChart";
-const { default: mqtt } = require("mqtt");
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import SetpointInput from "./SetpointInput";
 
-const margin = { right: 24 };
 function Heating() {
-  var temps = [4000, 3000, 2000, 2780, 1890, 2390, 3490, 1000, 200, 300];
-  var time = [2400, 1398, 9800, 3908, 4800, 3800, 4300, 5800, 8900];
-  var options = {
-    host: "8a62b91fd60f40e7b15cc35bebeca3c0.s1.eu.hivemq.cloud",
-    port: 8883,
-    protocol: "mqtts",
-    username: "group-9",
-    password: "Group-9-engineering",
-  };
+  const { data, current } = useMqttTopic("heating");
 
-  var client = mqtt.connect(options);
-
-  client.on("connect", function () {
-    console.log("Connected");
-  });
-
-  client.on("error", function (error) {
-    console.log(error);
-  });
-
-  client.on("message", function (topic, message) {
-    temps.push(parseFloat(message.toString().toInt));
-    time.push();
-  });
-
-  client.subscribe("heating");
   return (
-    <div>
-      <h1 style={{ textAlign: "center" }}>Heating</h1>
-      <Box
-        sx={{
-          width: "100%",
-          height: 300,
-          display: "flex",
-          justifyContent: "center",
-        }}
-      >
-        <LineChart
-          series={[{ data: temps, label: "pv" }]}
-          xAxis={[{ scaleType: "point", data: time }]}
-          yAxis={[{ width: 50 }]}
-          margin={margin}
-        />
+    <div className="dashboard-page">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#d32f2f' }}>
+          Temperature Monitor
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <SetpointInput label="Heating" unit="°C" color="#d32f2f" />
+          <Card variant="outlined" sx={{ minWidth: 200 }}>
+            <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+              <Typography variant="subtitle2" color="textSecondary">Current Temp</Typography>
+              <Typography variant="h5" color="#d32f2f">
+                {current ? `${current.value.toFixed(2)} °C` : "--"}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Box>
       </Box>
+
+      <Card variant="outlined" sx={{ p: 2 }}>
+        <Box sx={{ height: 500, width: '100%' }}>
+          <LineChart
+            xAxis={[{ 
+              data: data.map((d) => d.timestamp), 
+              scaleType: 'time',
+              valueFormatter: (date) => date.toLocaleTimeString(),
+            }]}
+            series={[
+              {
+                data: data.map((d) => d.value),
+                label: "Temperature (°C)",
+                color: "#d32f2f",
+                showMark: false,
+              },
+            ]}
+            yAxis={[{ label: 'Temperature (°C)' }]}
+            margin={{ left: 70, right: 20, top: 20, bottom: 30 }}
+            grid={{ vertical: true, horizontal: true }}
+          />
+        </Box>
+      </Card>
     </div>
   );
 }

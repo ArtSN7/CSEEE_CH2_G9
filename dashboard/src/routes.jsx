@@ -1,7 +1,7 @@
 import Home from "./Home";
 import Heating from "./Heating";
 import Stirring from "./Stirring";
-import Temperature from "./Temperature";
+import PH from "./pH";
 import Layout from "./Layout";
 
 export const routes = [
@@ -21,8 +21,8 @@ export const routes = [
         element: <Stirring />,
       },
       {
-        path: "/temperature",
-        element: <Temperature />,
+        path: "/ph",
+        element: <PH />,
       },
     ],
   },

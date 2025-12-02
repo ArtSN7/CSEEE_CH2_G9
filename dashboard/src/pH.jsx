@@ -1,22 +1,58 @@
-import Box from "@mui/material/Box";
+import React from "react";
+import { useMqttTopic } from "./mqttHooks";
 import { LineChart } from "@mui/x-charts/LineChart";
-const margin = { right: 24 };
-const udata = [4000, 3000, 2000, 2780, 1890, 2390, 3490, 1000, 200, 300];
-const pdata = [2400, 1398, 9800, 3908, 4800, 3800, 4300, 5800, 8900];
-function pH() {
+import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import Typography from "@mui/material/Typography";
+import SetpointInput from "./SetpointInput";
+
+function PH() {
+  const { data, current } = useMqttTopic("ph");
+
   return (
-    <div>
-      <h1 style={{ textAlign: "center" }}>pH</h1>
-      <Box sx={{ width: "100%", height: 300, display: "flex", justifyContent: "center" }}>
-        <LineChart
-          series={[{ data: udata, label: "pv" }]}
-          xAxis={[{ scaleType: "point", data: pdata }]}
-          yAxis={[{ width: 50 }]}
-          margin={margin}
-        />
+    <div className="dashboard-page">
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', color: '#388e3c' }}>
+          pH Monitoring
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <SetpointInput label="pH" unit="" color="#388e3c" />
+          <Card variant="outlined" sx={{ minWidth: 200 }}>
+            <CardContent sx={{ py: 1, '&:last-child': { pb: 1 } }}>
+              <Typography variant="subtitle2" color="textSecondary">Current Level</Typography>
+              <Typography variant="h5" color="#388e3c">
+                {current ? current.value.toFixed(2) : "--"}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Box>
       </Box>
+
+      <Card variant="outlined" sx={{ p: 2 }}>
+        <Box sx={{ height: 500, width: '100%' }}>
+          <LineChart
+            xAxis={[{ 
+              data: data.map((d) => d.timestamp), 
+              scaleType: 'time',
+              valueFormatter: (date) => date.toLocaleTimeString(),
+            }]}
+            series={[
+              {
+                data: data.map((d) => d.value),
+                label: "pH Level",
+                color: "#388e3c",
+                showMark: false,
+              },
+            ]}
+            yAxis={[{ min: 0, max: 14, label: 'pH' }]}
+            margin={{ left: 50, right: 20, top: 20, bottom: 30 }}
+            grid={{ vertical: true, horizontal: true }}
+          />
+        </Box>
+      </Card>
     </div>
   );
 }
 
-export default pH;
+export default PH;
