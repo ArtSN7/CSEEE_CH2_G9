@@ -14,6 +14,11 @@ from scipy.spatial.distance import mahalanobis
 from joblib import load
 from collections import deque
 import pickle
+import warnings  # Added to suppress warnings
+
+warnings.filterwarnings(
+    "ignore", category=RuntimeWarning
+)  # Suppress corr divide warnings
 
 # ================================
 # CONFIGURATION
@@ -42,6 +47,10 @@ k_base = (k_fixed["k_base"] + k_var["k_base"]) / 2
 # Load feature list
 with open(os.path.join(MODEL_DIR, "feature_list.txt"), "r") as f:
     ALL_FEATURES = [line.strip() for line in f]
+
+# Load fault types
+with open(os.path.join(MODEL_DIR, "fault_types.pkl"), "rb") as f:
+    FAULT_TYPES = pickle.load(f)
 
 print(f"✓ Loaded model with {len(ALL_FEATURES)} features")
 
@@ -90,17 +99,20 @@ STREAM_TYPES = {
     "variable_setpoints": "bioreactor_sim/variable_setpoints/telemetry/summary",
 }
 
-# Thresholds
-FAULT_THRESHOLD = 0.7  # Trigger alarm at 70% probability
-CLEAR_THRESHOLD = 0.4  # Clear alarm when below 40%
-SMOOTH_ALPHA = 0.7  # For exponential smoothing
+# Thresholds - lowered for sensitivity
+FAULT_THRESHOLD = 0.5  # Lowered from 0.7
+CLEAR_THRESHOLD = 0.3  # Clear alarm when below 30%
+SMOOTH_ALPHA = 0.8  # Increased from 0.7 for faster ramp
+FAULT_ID_THRESHOLD = 0.45  # Lowered from 0.6
 
-FAULT_TYPES = ["therm_voltage_bias", "ph_offset_bias", "heater_power_loss"]
+# Warm-up periods
+WARMUP_SMALL = WINDOW_SIZE  # For history_window
+WARMUP_CORR = 5  # Minimum for corr to avoid warnings
 
 # ================================
 # GLOBALS
 # ================================
-tp = tn = fp = fn = 0
+tp = tn = fp = fn = 0   
 is_anomaly = False
 df_buffer = pd.DataFrame()
 csv_filename = None
@@ -232,11 +244,13 @@ def compute_temporal_features(flat, history, corr_hist):
     # Rolling means and stds
     for feat in ["temp_dev", "ph_dev", "rpm_dev"]:
         flat[f"{feat}_rolling_mean"] = hist_df[feat].mean()
-        flat[f"{feat}_rolling_std"] = hist_df[feat].std() if len(hist_df) > 1 else 0
+        flat[f"{feat}_rolling_std"] = (
+            hist_df[feat].std(ddof=0) if len(hist_df) > 1 else 0
+        )  # ddof=0 for population std
 
     flat["dist_sq_rolling_mean"] = hist_df["dist_sq_min"].mean()
     flat["dist_sq_rolling_std"] = (
-        hist_df["dist_sq_min"].std() if len(hist_df) > 1 else 0
+        hist_df["dist_sq_min"].std(ddof=0) if len(hist_df) > 1 else 0
     )
     flat["dist_sq_rolling_max"] = hist_df["dist_sq_min"].max()
 
@@ -250,17 +264,36 @@ def compute_temporal_features(flat, history, corr_hist):
     flat["acid_pwm_diff"] = abs(flat["acid_pwm"] - last_sample["acid_pwm"])
     flat["base_pwm_diff"] = abs(flat["base_pwm"] - last_sample["base_pwm"])
 
-    # Cross-correlations (use corr_hist)
+    # Cross-correlations (use corr_hist) - check std >0 to avoid warnings
     corr_df = pd.DataFrame(list(corr_hist))
-    flat["heater_temp_corr"] = (
-        corr_df["heater_pwm"].corr(corr_df["temp_dev_diff"]) if len(corr_df) > 1 else 0
-    )
-    flat["acid_ph_corr"] = (
-        corr_df["acid_pwm"].corr(corr_df["ph_dev_diff"]) if len(corr_df) > 1 else 0
-    )
-    flat["base_ph_corr"] = (
-        corr_df["base_pwm"].corr(corr_df["ph_dev_diff"]) if len(corr_df) > 1 else 0
-    )
+    if len(corr_df) >= WARMUP_CORR:
+        if (
+            corr_df["heater_pwm"].std(ddof=0) > 0
+            and corr_df["temp_dev_diff"].std(ddof=0) > 0
+        ):
+            flat["heater_temp_corr"] = corr_df["heater_pwm"].corr(
+                corr_df["temp_dev_diff"]
+            )
+        else:
+            flat["heater_temp_corr"] = 0
+        if (
+            corr_df["acid_pwm"].std(ddof=0) > 0
+            and corr_df["ph_dev_diff"].std(ddof=0) > 0
+        ):
+            flat["acid_ph_corr"] = corr_df["acid_pwm"].corr(corr_df["ph_dev_diff"])
+        else:
+            flat["acid_ph_corr"] = 0
+        if (
+            corr_df["base_pwm"].std(ddof=0) > 0
+            and corr_df["ph_dev_diff"].std(ddof=0) > 0
+        ):
+            flat["base_ph_corr"] = corr_df["base_pwm"].corr(corr_df["ph_dev_diff"])
+        else:
+            flat["base_ph_corr"] = 0
+    else:
+        flat["heater_temp_corr"] = 0
+        flat["acid_ph_corr"] = 0
+        flat["base_ph_corr"] = 0
 
     # Efficiency ratios
     epsilon = 1e-6
@@ -288,8 +321,9 @@ def detect_anomaly(features):
         [p[0][1] for p in probs]
     )  # [prob_fault1, prob_fault2, prob_fault3]
 
-    # Max prob as overall fault prob
-    prob_fault = np.max(probs)
+    # Overall fault prob as mean of probs >0.5 (better for multi-fault)
+    active_probs = probs[probs > 0.5]
+    prob_fault = np.mean(active_probs) if len(active_probs) > 0 else np.max(probs)
 
     # Exponential smoothing
     smoothed_prob = SMOOTH_ALPHA * prob_fault + (1 - SMOOTH_ALPHA) * smoothed_prob
@@ -305,7 +339,7 @@ def detect_anomaly(features):
 
 def identify_faults(probs):
     """Identify faults based on probs."""
-    faults = [FAULT_TYPES[i] for i, p in enumerate(probs) if p > 0.5]
+    faults = [FAULT_TYPES[i] for i, p in enumerate(probs) if p > FAULT_ID_THRESHOLD]
     return ", ".join(faults) if faults else "N/A"
 
 
@@ -407,12 +441,19 @@ def on_message(client, userdata, msg):
             }
         )
 
-        # Extract features for model
-        features = np.array([flat.get(f, 0) for f in ALL_FEATURES])
+        # Warm-up check
+        if len(history_window) < WARMUP_SMALL or len(corr_history) < WARMUP_CORR:
+            pred_anomaly = False
+            smoothed_prob_fault = 0.0
+            probs = np.zeros(len(FAULT_TYPES))
+            fault_guess = "Warming up..."
+        else:
+            # Extract features for model
+            features = np.array([flat.get(f, 0) for f in ALL_FEATURES])
 
-        # Detect
-        pred_anomaly, smoothed_prob_fault, probs = detect_anomaly(features)
-        fault_guess = identify_faults(probs)
+            # Detect
+            pred_anomaly, smoothed_prob_fault, probs = detect_anomaly(features)
+            fault_guess = identify_faults(probs)
 
         # Update scores (binary)
         update_scores(pred_anomaly, flat["has_fault"])
@@ -424,17 +465,20 @@ def on_message(client, userdata, msg):
         df_buffer = pd.concat([df_buffer, pd.DataFrame([flat])], ignore_index=True)
         save_buffer()
 
-        # Live output
+        # Live output with raw probs debug
         count = len(df_buffer) + (tp + tn + fp + fn)  # Approximate total
         pred_status = "🔴 FAULT" if pred_anomaly else "✓ Normal"
         true_status = "FAULT" if flat["has_fault"] else "OK"
         match = "✓" if pred_anomaly == flat["has_fault"] else "✗"
+        probs_str = ", ".join(
+            [f"{FAULT_TYPES[i]}={p:.2f}" for i, p in enumerate(probs)]
+        )
 
         print(
             f"[{count:4d}] {flat['timestamp']} | "
             f"{match} Pred: {pred_status:11} (p={smoothed_prob_fault:.3f}) | "
             f"True: {true_status:5} | Active: {flat['faults_active']:30} | "
-            f"ID: {fault_guess}"
+            f"ID: {fault_guess} | Probs: {probs_str}"
         )
 
     except Exception as e:
