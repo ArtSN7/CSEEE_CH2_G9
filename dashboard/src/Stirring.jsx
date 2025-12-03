@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import SetpointInput from "./SetpointInput";
 
 function Stirring() {
-  const { data, current } = useMqttTopic("stirring");
+  const { data, current } = useMqttTopic("readings/stirring");
 
   return (
     <div className="dashboard-page">

@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import SetpointInput from "./SetpointInput";
 
 function PH() {
-  const { data, current } = useMqttTopic("ph");
+  const { data, current } = useMqttTopic("readings/ph");
 
   return (
     <div className="dashboard-page">

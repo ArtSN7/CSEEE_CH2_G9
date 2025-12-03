@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import SetpointInput from "./SetpointInput";
 
 function Heating() {
-  const { data, current } = useMqttTopic("heating");
+  const { data, current } = useMqttTopic("readings/heating");
 
   return (
     <div className="dashboard-page">

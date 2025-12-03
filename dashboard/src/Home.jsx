@@ -46,9 +46,9 @@ const KpiCard = ({ title, value, unit, data, color }) => {
 };
 
 function Home() {
-  const { data: heatData, current: currentHeat } = useMqttTopic("heating");
-  const { data: stirData, current: currentStir } = useMqttTopic("stirring");
-  const { data: phData, current: currentPh } = useMqttTopic("ph");
+  const { data: heatData, current: currentHeat } = useMqttTopic("readings/heating");
+  const { data: stirData, current: currentStir } = useMqttTopic("readings/stirring");
+  const { data: phData, current: currentPh } = useMqttTopic("readings/ph");
 
   const minLength = Math.min(heatData.length, stirData.length, phData.length);
   const sliceHeat = heatData.slice(-minLength);

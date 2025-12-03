@@ -11,8 +11,8 @@ function SetpointInput({ label, unit, color }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (value.trim() !== "") {
-      const message = `${label}: ${value}`;
-      publishMqtt("setpoints", message);
+      const message = value;
+      publishMqtt(`setpoints/${label.toLowerCase()}`, message);
       setValue("");
     }
   };
