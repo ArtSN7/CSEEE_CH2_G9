@@ -18,9 +18,9 @@ const char* mqtt_username = "group-9";
 const char* mqtt_password = "Group-9-engineering";
 
 //setpoints
-float temperature_setpoint = 30.0;
+float temperature_setpoint = 29.5;
 float pH_setpoint = 5.0;
-float rpm_setpoint = 800.0;
+float rpm_setpoint = 1000.0;
 //sensor data
 float current_temp = 0.0;
 float current_pH = 0.0;
@@ -29,7 +29,7 @@ float current_rpm = 0.0;
 //arduino i2c address
 #define SDA_PIN 21
 #define SCL_PIN 22
-const int ARDUINO_ADDRESS = 8;
+const int ARDUINO_ADDRESS = 0x55;
 long previous_time = 0;
 
 WiFiClientSecure wifiClient;
@@ -97,7 +97,7 @@ void readFromArduino() {
 
 
     Wire.endTransmission();
-    Serial.printf("Received current readings temperature:%f, pH:%f, rpm:%f to Arduino.", current_temp, current_pH, current_rpm);
+    Serial.printf("Received current readings temperature:%f, pH:%f, rpm:%f from Arduino.\n", current_temp, current_pH, current_rpm);
   } 
   else {
     Serial.print("Failed to receive from Arduino.");
@@ -210,5 +210,3 @@ void publishSensorData(float temp, float pH, float rpm) {
   mqttClient.publish(("readings/ph"), String(pH, 2).c_str());
   mqttClient.publish(("readings/stirring"), String(rpm, 2).c_str());
 }
-
-
